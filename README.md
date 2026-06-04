@@ -1,8 +1,12 @@
 # Hermes Shared Browser
 
-A small, reusable setup for running a persistent visible Chromium session on a headless Linux server, VPS, or homelab box so Hermes Agent can automate the same browser session that a human logs into.
+A small, reusable deployment wrapper for Hermes Agent's existing local Chromium CDP support.
 
-This solves a common problem with remote agents: authentication-heavy websites need a real human login once, but the agent still needs browser automation afterward. The pattern is:
+Hermes already provides the browser automation engine: browser tools, `/browser connect`, and `browser.cdp_url`. This repo does **not** replace or fork that functionality. It provides a Debian/Ubuntu-focused headless-server runtime that makes a persistent visible Chromium session available safely and repeatably through systemd, Xvfb, x11vnc, and noVNC.
+
+Use it when Hermes runs on a Linux server, VPS, Raspberry Pi, or homelab machine, but a human on a laptop still needs to see the browser, log in, complete MFA, or inspect pages before Hermes continues automation in the same session.
+
+The pattern is:
 
 - Chromium runs headed under a virtual X display (`Xvfb`).
 - The human connects through VNC/noVNC to log in, solve MFA, or inspect pages.
@@ -33,33 +37,32 @@ Expose only pixels/keyboard through VNC/noVNC, and only on a trusted private pat
 
 ## Requirements
 
-Tested on Linux with systemd user services.
+This implementation is intentionally focused on Debian-based distros for now: Debian, Ubuntu, Raspberry Pi OS, and close derivatives using `apt` and systemd user services.
 
-Packages usually needed:
+Install dependencies with:
+
+```bash
+make install-deps
+```
+
+Equivalent manual command:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y chromium-browser xvfb x11vnc novnc websockify curl jq
+sudo apt-get install -y chromium xvfb x11vnc novnc websockify curl jq
 ```
 
-Package names vary by distro:
-
-- Debian/Ubuntu may use `chromium`, `chromium-browser`, or a Snap wrapper.
-- Fedora: `chromium xorg-x11-server-Xvfb x11vnc python3-websockify novnc`.
-- Arch: `chromium xorg-server-xvfb x11vnc websockify novnc`.
+Some Ubuntu releases package Chromium as `chromium-browser` instead of `chromium`; `make install-deps` handles that where possible. Other distros can use the same architecture, but they are not documented or tested here yet.
 
 ## Quick start
 
 Clone this repo, then:
 
 ```bash
-./scripts/install-systemd-user.sh
-systemctl --user daemon-reload
-systemctl --user enable --now hermes-browser-xvfb.service
-systemctl --user enable --now hermes-browser-chromium.service
-systemctl --user enable --now hermes-browser-vnc.service
-systemctl --user enable --now hermes-browser-novnc.service
-./scripts/check-health.sh
+make install-deps
+make install
+make start
+make health
 ```
 
 Set Hermes to use the local CDP endpoint:
@@ -68,7 +71,14 @@ Set Hermes to use the local CDP endpoint:
 hermes config set browser.cdp_url http://127.0.0.1:9222
 ```
 
-Open noVNC from a machine that can reach your server:
+Open noVNC from a machine that can reach your server. If this is not loopback-only, set a VNC password first:
+
+```bash
+make set-vnc-password
+systemctl --user restart hermes-browser-vnc.service hermes-browser-novnc.service
+```
+
+Then open:
 
 ```text
 http://<server-private-ip>:6080/vnc.html
@@ -91,8 +101,10 @@ VNC_HOST=127.0.0.1
 VNC_PORT=5900
 NOVNC_HOST=127.0.0.1
 NOVNC_PORT=6080
+NOVNC_WEB_DIR=/usr/share/novnc
 CHROME_PROFILE_DIR=$HOME/.hermes/browser-profiles/shared
-CHROME_BIN=chromium-browser
+CHROME_BIN=chromium
+VNC_PASSWORD_FILE=
 ```
 
 For remote human access, set `NOVNC_HOST` to a private interface IP, for example your Tailscale IP:
@@ -114,9 +126,23 @@ Then restart noVNC:
 systemctl --user restart hermes-browser-novnc.service
 ```
 
+If noVNC is exposed beyond loopback, set a VNC password so the browser is not just protected by network reachability:
+
+```bash
+make set-vnc-password
+systemctl --user restart hermes-browser-vnc.service hermes-browser-novnc.service
+```
+
 Do not change `CDP_HOST=127.0.0.1` unless you fully understand the security impact.
 
 ## Verification
+
+```bash
+make status
+make health
+```
+
+Equivalent manual checks:
 
 ```bash
 systemctl --user status hermes-browser-xvfb.service --no-pager

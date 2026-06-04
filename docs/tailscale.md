@@ -23,13 +23,19 @@ CDP_HOST=127.0.0.1
 VNC_HOST=127.0.0.1
 ```
 
-3. Restart noVNC:
+3. Set a VNC password before exposing noVNC on the Tailnet:
 
 ```bash
-systemctl --user restart hermes-browser-novnc.service
+make set-vnc-password
 ```
 
-4. Open from your laptop:
+4. Restart VNC/noVNC:
+
+```bash
+systemctl --user restart hermes-browser-vnc.service hermes-browser-novnc.service
+```
+
+5. Open from your laptop:
 
 ```text
 http://<tailscale-ip>:6080/vnc.html

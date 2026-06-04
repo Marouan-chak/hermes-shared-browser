@@ -21,6 +21,8 @@ Recommended:
 - Keep raw VNC loopback-only.
 - Expose noVNC only through a VPN/Tailnet/private LAN or behind strong auth.
 - Prefer a private bind address over `0.0.0.0`.
+- When noVNC is exposed beyond loopback, configure a VNC password with `make set-vnc-password`.
+- Treat noVNC as interactive account access, not as a harmless dashboard.
 
 ## Browser profile
 

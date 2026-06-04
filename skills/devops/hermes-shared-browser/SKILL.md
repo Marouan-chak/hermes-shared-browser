@@ -15,7 +15,7 @@ metadata:
 
 ## Overview
 
-Use this skill to configure a reusable, persistent, visible browser for Hermes Agent on a headless Linux host. The pattern is:
+Use this skill to configure a reusable, persistent, visible browser runtime for Hermes Agent on a headless Linux host. Hermes already provides the browser automation engine through browser tools, `/browser connect`, and `browser.cdp_url`; this stack is an operational wrapper that makes a safe, persistent, visible Chromium session available on Debian/Ubuntu-style servers.
 
 ```text
 Hermes Agent -> local Chrome DevTools Protocol -> Chromium profile
@@ -90,32 +90,27 @@ git clone https://github.com/Marouan-chak/hermes-shared-browser.git
 cd hermes-shared-browser
 ```
 
-Install OS packages. Package names vary by distro, but the stack needs Chromium, Xvfb, x11vnc, noVNC/websockify, curl, and optionally jq.
+Install OS packages. This repo is intentionally Debian/Ubuntu focused for now. Use the Makefile target:
 
-Debian/Ubuntu-style example:
+```bash
+make install-deps
+```
+
+Equivalent manual package set:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y chromium-browser xvfb x11vnc novnc websockify curl jq
+sudo apt-get install -y chromium xvfb x11vnc novnc websockify curl jq
 ```
 
-If `chromium-browser` is unavailable, try `chromium` or use the distro package name. Avoid assuming Snap Chromium works correctly under user systemd; if it exits immediately, point `CHROME_BIN` to a real executable wrapper that stays attached.
+Some Ubuntu releases use `chromium-browser`; the installer tries `chromium` first and falls back where possible.
 
 Install the user services:
 
 ```bash
-./scripts/install-systemd-user.sh
-systemctl --user daemon-reload
-systemctl --user enable --now hermes-browser-xvfb.service
-systemctl --user enable --now hermes-browser-chromium.service
-systemctl --user enable --now hermes-browser-vnc.service
-systemctl --user enable --now hermes-browser-novnc.service
-```
-
-Run the built-in health check:
-
-```bash
-./scripts/check-health.sh
+make install
+make start
+make health
 ```
 
 ## Configure Hermes Agent
@@ -175,6 +170,13 @@ Open the browser UI from a machine that can reach the private interface:
 
 ```text
 http://<private-or-tailnet-ip>:6080/vnc.html
+```
+
+When noVNC is exposed beyond loopback, set a VNC password:
+
+```bash
+make set-vnc-password
+systemctl --user restart hermes-browser-vnc.service hermes-browser-novnc.service
 ```
 
 Recommended workflow:

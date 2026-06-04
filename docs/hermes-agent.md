@@ -1,6 +1,6 @@
 # Hermes Agent integration
 
-Hermes Agent can use a local CDP endpoint for browser automation.
+Hermes Agent can use a local CDP endpoint for browser automation. This repo does not implement a new browser engine; it packages a Debian/Ubuntu headless-server runtime for Hermes' existing `browser.cdp_url` support.
 
 After this stack is running:
 
