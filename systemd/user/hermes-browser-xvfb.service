@@ -1,0 +1,13 @@
+[Unit]
+Description=Hermes Shared Browser - Xvfb display
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hermes-shared-browser/env
+ExecStart=/usr/bin/Xvfb :${DISPLAY_NUM} -screen 0 ${SCREEN_GEOMETRY} -ac -nolisten tcp
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

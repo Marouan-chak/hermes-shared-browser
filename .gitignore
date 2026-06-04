@@ -1,0 +1,13 @@
+# Browser state / secrets
+profiles/
+*.log
+*.sqlite
+*.db
+cookies*
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

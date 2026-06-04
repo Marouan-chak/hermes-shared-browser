@@ -1,0 +1,14 @@
+[Unit]
+Description=Hermes Shared Browser - x11vnc bridge
+After=hermes-browser-xvfb.service
+Requires=hermes-browser-xvfb.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hermes-shared-browser/env
+ExecStart=/usr/bin/x11vnc -display :${DISPLAY_NUM} -listen ${VNC_HOST} -rfbport ${VNC_PORT} -forever -shared -nopw
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

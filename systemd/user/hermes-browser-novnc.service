@@ -1,0 +1,14 @@
+[Unit]
+Description=Hermes Shared Browser - noVNC web bridge
+After=hermes-browser-vnc.service
+Requires=hermes-browser-vnc.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hermes-shared-browser/env
+ExecStart=/usr/bin/websockify --web ${NOVNC_WEB_DIR} ${NOVNC_HOST}:${NOVNC_PORT} ${VNC_HOST}:${VNC_PORT}
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

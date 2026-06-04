@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes Shared Browser - Chromium with local CDP
+After=hermes-browser-xvfb.service
+Requires=hermes-browser-xvfb.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hermes-shared-browser/env
+Environment=DISPLAY=:${DISPLAY_NUM}
+ExecStartPre=/usr/bin/mkdir -p ${CHROME_PROFILE_DIR}
+ExecStart=/usr/bin/env ${CHROME_BIN} \
+  --user-data-dir=${CHROME_PROFILE_DIR} \
+  --remote-debugging-address=${CDP_HOST} \
+  --remote-debugging-port=${CDP_PORT} \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-gpu \
+  --disable-dev-shm-usage \
+  --password-store=basic \
+  about:blank
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
