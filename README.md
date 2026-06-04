@@ -138,6 +138,14 @@ Expected:
 
 ## Hermes Agent usage
 
+This repository includes a reusable Hermes skill at:
+
+```text
+skills/devops/hermes-shared-browser/SKILL.md
+```
+
+To install it into a local Hermes profile, copy the `skills/devops/hermes-shared-browser` directory into your Hermes skills directory, then start a new Hermes session so the skill loader can see it.
+
 After configuring `browser.cdp_url`, Hermes browser tools use the shared browser. You can also point any CDP-capable automation at:
 
 ```text
