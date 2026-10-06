@@ -1,7 +1,7 @@
 ---
 name: hermes-shared-browser
-description: Use when configuring a persistent visible Chromium session for Hermes Agent on a headless Linux server, VPS, homelab box, or SSH-only machine. Guides safe Xvfb, VNC/noVNC, local-only CDP, Tailscale/private-LAN access, Hermes browser.cdp_url configuration, health checks, and troubleshooting.
-version: 1.0.0
+description: Configure a persistent visible Chromium session for Hermes Agent on a headless Linux server, with loopback-only CDP, authenticated VNC/noVNC, private-network access, health checks, and troubleshooting.
+version: 1.1.0
 author: Hermes Agent
 license: MIT
 platforms: [linux]
@@ -13,333 +13,139 @@ metadata:
 
 # Hermes Shared Browser
 
-## Overview
+## Scope
 
-Use this skill to configure a reusable, persistent, visible browser runtime for Hermes Agent on a headless Linux host. Hermes already provides the browser automation engine through browser tools, `/browser connect`, and `browser.cdp_url`; this stack is an operational wrapper that makes a safe, persistent, visible Chromium session available on Debian/Ubuntu-style servers.
+Use this skill to set up or troubleshoot a browser that a human and Hermes can share on a Linux server. Hermes supplies browser automation through `browser.cdp_url` and `/browser connect`; this project supplies the visible runtime. Use the `hermes-agent` skill for general Hermes installation or provider configuration.
 
-```text
-Hermes Agent -> local Chrome DevTools Protocol -> Chromium profile
-Human user   -> VNC/noVNC pixels + keyboard     -> same Chromium profile
-```
-
-This lets a person log in once through a visual browser, handle MFA, solve account-specific prompts, or inspect the UI, then let Hermes continue using the same authenticated browser profile through CDP.
-
-The open-source reference implementation is:
+Reference repository: https://github.com/Marouan-chak/hermes-shared-browser
 
 ```text
-https://github.com/Marouan-chak/hermes-shared-browser
+Hermes -> CDP 127.0.0.1:9222 -> Chromium -> Xvfb
+                                            |
+                          VNC 127.0.0.1:5900 -> noVNC
+                                            |
+                               Human via SSH/private VPN
 ```
 
-Security boundary: CDP is powerful enough to control authenticated accounts and read browser state. Keep CDP bound to loopback (`127.0.0.1`) only. Expose only the VNC/noVNC human-control surface, and only on a trusted private path such as Tailscale, WireGuard, SSH tunnel, or private LAN.
+CDP and VNC both grant access to authenticated accounts. Keep CDP and raw VNC local. Expose noVNC only over an encrypted private route, with a VNC password for any non-loopback bind. Do not commit profiles, cookies, passwords, local config, browsing captures, or private logs.
 
-## When to Use
+## Installation
 
-Use this skill when the user asks to:
+The package installer targets Debian/Ubuntu with apt. Python 3.9 or newer and systemd user services are required. The Debian 12 stack is covered by a disposable integration test. Ubuntu Snap Chromium can need additional profile/Xauthority configuration; consult the README's troubleshooting notes.
 
-- make Hermes browser automation reuse a browser they can see and log into manually
-- run Hermes browser automation on a headless server, VPS, Raspberry Pi, or homelab machine
-- connect Hermes Agent to an existing visible Chromium/Chrome session through CDP
-- expose browser pixels over Tailscale/private LAN without exposing CDP
-- troubleshoot `browser.cdp_url`, CDP connection failures, blank VNC screens, or service startup failures
-- package or document a shared browser stack for other Hermes users
-
-Do not use this skill for:
-
-- general Hermes Agent installation or model/provider configuration; use the `hermes-agent` skill
-- exposing Chrome DevTools Protocol over the public internet
-- storing or committing browser profiles, cookies, screenshots with secrets, or local service environment files
-- bypassing website terms of service or automating accounts without authorization
-
-## Reference Architecture
-
-```text
-Hermes Agent process
-  browser.cdp_url=http://127.0.0.1:9222
-        |
-        v
-  Chromium --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222
-        |
-        v
-  Xvfb virtual display, for example :99
-        |
-        v
-  x11vnc, preferably bound to 127.0.0.1:5900
-        |
-        v
-  noVNC/websockify, bound to a private interface or 127.0.0.1 behind a tunnel
-        |
-        v
-  Human browser/VNC client
-```
-
-Default safe bindings:
-
-| Component | Default bind | Exposure guidance |
-| --- | --- | --- |
-| CDP | `127.0.0.1:9222` | Keep loopback-only. Do not expose to LAN/VPN/public internet. |
-| VNC | `127.0.0.1:5900` | Keep loopback-only unless separately authenticated and encrypted. |
-| noVNC | `127.0.0.1:6080` or private IP | Expose only via private LAN/VPN/Tailnet or behind authentication. |
-| Browser profile | `~/.hermes/browser-profiles/shared` | Persistent local state; never commit or copy into logs. |
-
-## Installation Workflow
-
-Start from the reference repository:
+Run browser services under the user's ordinary account, never as root. Root is needed only for OS packages:
 
 ```bash
 git clone https://github.com/Marouan-chak/hermes-shared-browser.git
 cd hermes-shared-browser
-```
-
-Install OS packages. This repo is intentionally Debian/Ubuntu focused for now. Use the Makefile target:
-
-```bash
 make install-deps
-```
-
-Equivalent manual package set:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y chromium xvfb x11vnc novnc websockify curl jq
-```
-
-Some Ubuntu releases use `chromium-browser`; the installer tries `chromium` first and falls back where possible.
-
-Install the user services:
-
-```bash
 make install
 make start
 make health
 ```
 
-## Configure Hermes Agent
+Install copies a runtime helper into the user's config directory and renders systemd unit templates. Moving the checkout does not break installed services. Run `make install` again after repository updates; it preserves existing settings. Do not copy the source unit templates directly into systemd.
 
-Point Hermes to the local CDP endpoint:
+## Configuration
 
-```bash
-hermes config set browser.cdp_url http://127.0.0.1:9222
-```
+Default: `~/.config/hermes-shared-browser/env`. A configured `XDG_CONFIG_HOME` is honored by the installer and commands; generated units retain that absolute path.
 
-Then restart or relaunch any long-running Hermes session that needs to pick up the updated config.
+Config uses `KEY=VALUE` data, not executable shell syntax. Quote paths containing spaces. Only leading `$HOME/`, `${HOME}/`, and `~/` in paths are expanded. Do not use commands, `export`, or unknown keys. The runtime rejects unsafe addresses, duplicate ports, malformed geometry, and non-private config/password files.
 
-Smoke-check CDP before using browser tools:
+Common settings:
 
 ```bash
-curl -fsS http://127.0.0.1:9222/json/version | jq .
+DISPLAY_NUM=99
+SCREEN_GEOMETRY=1600x1000x24
+CDP_HOST=127.0.0.1
+CDP_PORT=9222
+VNC_HOST=127.0.0.1
+VNC_PORT=5900
+NOVNC_HOST=127.0.0.1
+NOVNC_PORT=6080
+NOVNC_WEB_DIR=/usr/share/novnc
+CHROME_PROFILE_DIR=$HOME/.hermes/browser-profiles/shared
+CHROME_BIN=chromium
+WEBSOCKIFY_BIN=websockify
+VNC_PASSWORD_FILE=
 ```
 
-Expected shape:
+CDP/VNC must remain `127.0.0.1`. noVNC accepts literal loopback, RFC1918, Tailscale (`100.64.0.0/10`), or IPv6 ULA addresses; never wildcard/public addresses. Ports are distinct and between 1024 and 65535. Use a dedicated browser profile, separate from desktop Chromium.
 
-- HTTP succeeds from the Hermes host itself
-- response contains a Chromium/Chrome version
-- response contains `webSocketDebuggerUrl`
-- `webSocketDebuggerUrl` points to `127.0.0.1` or `localhost`, not a public/private network address
+## Human access and Hermes
 
-## Configure Remote Human Access
-
-For a remote human to see the browser, expose noVNC on a private address only.
-
-Edit the generated environment file:
+Keep the loopback defaults for SSH access. On the laptop:
 
 ```bash
-$EDITOR ~/.config/hermes-shared-browser/env
+ssh -N -L 6080:127.0.0.1:6080 user@server
 ```
 
-Example for a private VPN/Tailscale interface:
+Open `http://127.0.0.1:6080/vnc.html` on the laptop. To bind directly to a private VPN address instead, first set the VNC password:
+
+```bash
+make set-vnc-password
+```
+
+Then edit the config:
 
 ```bash
 NOVNC_HOST=<private-or-tailnet-ip>
 NOVNC_PORT=6080
 ```
 
-Keep these values unchanged unless there is a specific reason:
+Restart VNC before noVNC so the password is active:
 
 ```bash
-CDP_HOST=127.0.0.1
-VNC_HOST=127.0.0.1
-```
-
-Restart noVNC after changing `NOVNC_HOST` or `NOVNC_PORT`:
-
-```bash
-systemctl --user restart hermes-browser-novnc.service
-```
-
-Open the browser UI from a machine that can reach the private interface:
-
-```text
-http://<private-or-tailnet-ip>:6080/vnc.html
-```
-
-When noVNC is exposed beyond loopback, set a VNC password:
-
-```bash
-make set-vnc-password
 systemctl --user restart hermes-browser-vnc.service hermes-browser-novnc.service
+make health
 ```
 
-Recommended workflow:
+Open `http://<private-or-tailnet-ip>:6080/vnc.html` from an allowed VPN device. Restrict access with VPN ACLs. Private LAN addresses alone do not encrypt HTTP or VNC; use an encrypted VPN, SSH, or authenticated HTTPS proxy.
 
-1. Open noVNC.
-2. Log into the target website manually.
-3. Complete MFA or account prompts.
-4. Ask Hermes to continue in that same browser session.
-5. Keep noVNC reachable only while needed if the environment is not fully trusted.
+A configured password file that disappears causes startup to fail. The runtime never falls back to passwordless access. noVNC also checks the already-running VNC server's authentication, rather than trusting that a saved password has taken effect.
 
-## Verification Checklist
-
-Run these checks before telling the user the setup is ready:
+On the Hermes server:
 
 ```bash
-systemctl --user --no-pager --lines=30 status hermes-browser-xvfb.service
-systemctl --user --no-pager --lines=30 status hermes-browser-chromium.service
-systemctl --user --no-pager --lines=30 status hermes-browser-vnc.service
-systemctl --user --no-pager --lines=30 status hermes-browser-novnc.service
-ss -ltnp | grep -E ':(9222|5900|6080)\b'
-curl -fsS http://127.0.0.1:9222/json/version | jq .
+hermes config set browser.cdp_url http://127.0.0.1:9222
 ```
 
-Expected:
+Use the configured CDP port if changed. Relaunch an existing Hermes session after a configuration change. The human can log in and complete MFA through noVNC, then Hermes can continue using that same profile.
 
-- Xvfb service is active
-- Chromium service is active and not repeatedly restarting
-- CDP listens on `127.0.0.1:<port>` only
-- VNC listens on `127.0.0.1:<port>` unless intentionally and safely changed
-- noVNC listens on the intended private interface/port
-- Hermes has `browser.cdp_url` set to the local CDP endpoint
-- A human can open noVNC and see Chromium
-- Hermes browser automation can navigate using the same profile after the human login
-
-CDP exposure guard:
+## Verification and troubleshooting
 
 ```bash
-ss -ltnp | grep ':9222'
+make status
+make health
 ```
 
-Reject unsafe results such as:
+Health checks verify all services, exact bind addresses, CDP version/websocket URL, the noVNC HTML page, live VNC authentication, and profile permissions. They return failure for missing listeners or unsafe authentication. The noVNC HTTP check uses its configured address, including a private VPN bind.
 
-```text
-0.0.0.0:9222
-:::9222
-<lan-ip>:9222
-<tailnet-ip>:9222
-```
-
-Accept safe results such as:
-
-```text
-127.0.0.1:9222
-[::1]:9222
-```
-
-## Troubleshooting
-
-### noVNC opens but the screen is blank
-
-Check Xvfb and Chromium logs:
+Inspect failures:
 
 ```bash
 journalctl --user -u hermes-browser-xvfb.service -n 100 --no-pager
 journalctl --user -u hermes-browser-chromium.service -n 100 --no-pager
+journalctl --user -u hermes-browser-vnc.service -n 100 --no-pager
+journalctl --user -u hermes-browser-novnc.service -n 100 --no-pager
 ```
 
-Common causes:
+A blank screen can mean a bad Chromium executable, occupied profile, or failed Xvfb. The launcher sets the actual `DISPLAY`, waits for Xvfb, and uses a private Xauthority cookie. Chromium's sandbox stays enabled. Never recommend disabling it as a production workaround.
 
-- Chromium binary path is wrong
-- Chromium exits because the package is a wrapper that does not behave well under systemd
-- display number mismatch between Xvfb, Chromium, and x11vnc
-- profile directory permissions are wrong
+Use absolute binary paths if needed. `WEBSOCKIFY_BIN` is supported. Snap Chromium may need a profile inside `~/snap/chromium/common/` and can restrict custom Xauthority paths; a native package is preferable when confinement prevents access.
 
-### CDP does not respond
+After fixing a repeated startup failure:
 
 ```bash
-curl -v http://127.0.0.1:9222/json/version
-journalctl --user -u hermes-browser-chromium.service -n 100 --no-pager
+systemctl --user reset-failed hermes-browser-xvfb.service hermes-browser-chromium.service hermes-browser-vnc.service hermes-browser-novnc.service
+make restart
+make health
 ```
 
-Check that Chromium was launched with:
+`make stop` stops the stack but retains startup at login. `make disable` also disables startup. Systemd user lingering is an optional administrator choice for operation after logout/at boot.
 
-```text
---remote-debugging-address=127.0.0.1
---remote-debugging-port=<port>
-```
+## Contributions and reporting
 
-### Hermes still uses an ephemeral browser
+Run `make validate` and `make test`. With runtime dependencies installed, `make test-integration` uses only disposable state and verifies the real CDP/VNC/noVNC stack and browser persistence. Do not claim a production setup is active based only on these repository tests: report actual service, listener, and human/Hermes-session evidence separately.
 
-Check the active Hermes config:
-
-```bash
-hermes config get browser.cdp_url
-```
-
-If the config is correct but the current Hermes session was already running, relaunch Hermes so it reloads config.
-
-### Service starts in a shell but not under systemd
-
-Use explicit absolute paths in `~/.config/hermes-shared-browser/env`:
-
-```bash
-CHROME_BIN=/usr/bin/chromium
-NOVNC_WEB_DIR=/usr/share/novnc
-WEBSOCKIFY_BIN=/usr/bin/websockify
-```
-
-Then reload and restart:
-
-```bash
-systemctl --user daemon-reload
-systemctl --user restart hermes-browser-chromium.service hermes-browser-novnc.service
-```
-
-### Remote noVNC is unreachable
-
-Check the bind address and firewall/private network path:
-
-```bash
-ss -ltnp | grep ':6080'
-curl -fsSI http://127.0.0.1:6080/ | head
-```
-
-From another machine on the same private network, test:
-
-```bash
-curl -fsSI http://<private-or-tailnet-ip>:6080/ | head
-```
-
-If local works but remote fails, the issue is usually the bind address, host firewall, VPN ACLs, or route/DNS rather than Chromium.
-
-## Open-Source Contribution Best Practices
-
-When modifying the reference repo or producing reusable instructions:
-
-- Use placeholders like `<private-or-tailnet-ip>` instead of real private hostnames, real IPs, customer names, account IDs, tokens, or local-only paths.
-- Do not commit `~/.config/hermes-shared-browser/env`, browser profiles, cookies, screenshots, VNC passwords, logs, `.env` files, or generated state.
-- Keep CDP examples loopback-only.
-- Include verification commands and expected safe/unsafe outputs.
-- Test shell scripts with `bash -n`.
-- Verify user systemd units with `systemd-analyze --user verify` when available.
-- Run `git diff --check` before committing.
-- Scan staged changes for sensitive-looking strings before pushing to a public repository.
-
-Pre-push guard for public repos:
-
-```bash
-git status --short
-git diff --cached --stat
-git diff --cached --check
-git diff --cached | grep -Ei 'api[_-]?key|token|secret|password|authorization|bearer|private key|BEGIN|\.env' || true
-git diff --cached --name-only | grep -Ei '(^|/)(\.env|config\.ya?ml|auth\.json|credentials|secret|secrets|\.pem|\.key|id_rsa|id_ed25519|.*\.db|browser-profiles?)$' && echo 'STOP: sensitive-looking file staged'
-```
-
-## Verification Before Finishing
-
-Before finalizing a setup or repo change:
-
-- [ ] The browser stack services are installed and active, or blockers are clearly reported.
-- [ ] CDP responds locally on loopback.
-- [ ] CDP is not exposed on LAN, VPN, Tailnet, or public interfaces.
-- [ ] noVNC is reachable only through the intended private route.
-- [ ] Hermes `browser.cdp_url` points at the local CDP URL.
-- [ ] A human login and Hermes automation use the same persistent browser profile.
-- [ ] Public documentation contains no real secrets, internal hostnames, account IDs, customer data, cookies, screenshots, or local state.
+Before a public commit, inspect staged names and content and scan with a redacting secret scanner. CI scans history and the working tree with Gitleaks. Keep documentation generic: use placeholders, never real private IPs, internal hostnames, account IDs, tokens, customer data, or personal paths. Do not paste raw config or authenticated browser output into public logs or issues.

@@ -1,9 +1,26 @@
 # Browser state / secrets
 profiles/
+browser-profiles/
+chrome-profile/
+.hermes/
+.config/
+env
+vnc.pass
+xauthority*
+*.pem
+*.key
+*.p12
+*.pfx
+*.har
+screenshots/
+downloads/
 *.log
 *.sqlite
 *.db
 cookies*
+__pycache__/
+*.py[cod]
+.venv/
 .env
 .env.*
 

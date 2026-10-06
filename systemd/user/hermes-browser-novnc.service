@@ -1,14 +1,16 @@
 [Unit]
 Description=Hermes Shared Browser - noVNC web bridge
 After=hermes-browser-vnc.service
-Requires=hermes-browser-vnc.service
+Wants=hermes-browser-vnc.service
+PartOf=hermes-browser.target hermes-browser-vnc.service
 
 [Service]
 Type=simple
-EnvironmentFile=%h/.config/hermes-shared-browser/env
-ExecStart=/usr/bin/websockify --web ${NOVNC_WEB_DIR} ${NOVNC_HOST}:${NOVNC_PORT} ${VNC_HOST}:${VNC_PORT}
-Restart=on-failure
+Environment=HERMES_BROWSER_CONFIG=@CONFIG@
+ExecStart=/usr/bin/python3 @RUNTIME@ launch novnc
+UMask=0077
+Restart=always
 RestartSec=2
 
 [Install]
-WantedBy=default.target
+WantedBy=hermes-browser.target

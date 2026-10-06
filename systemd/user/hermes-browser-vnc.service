@@ -1,14 +1,16 @@
 [Unit]
 Description=Hermes Shared Browser - x11vnc bridge
 After=hermes-browser-xvfb.service
-Requires=hermes-browser-xvfb.service
+Wants=hermes-browser-xvfb.service
+PartOf=hermes-browser.target hermes-browser-xvfb.service
 
 [Service]
 Type=simple
-EnvironmentFile=%h/.config/hermes-shared-browser/env
-ExecStart=/usr/bin/bash -lc 'args=(-display ":${DISPLAY_NUM}" -listen "${VNC_HOST}" -rfbport "${VNC_PORT}" -forever -shared); if [[ -n "${VNC_PASSWORD_FILE:-}" && -f "${VNC_PASSWORD_FILE}" ]]; then args+=(-rfbauth "${VNC_PASSWORD_FILE}"); else args+=(-nopw); fi; exec /usr/bin/x11vnc "${args[@]}"'
-Restart=on-failure
+Environment=HERMES_BROWSER_CONFIG=@CONFIG@
+ExecStart=/usr/bin/python3 @RUNTIME@ launch vnc
+UMask=0077
+Restart=always
 RestartSec=2
 
 [Install]
-WantedBy=default.target
+WantedBy=hermes-browser.target

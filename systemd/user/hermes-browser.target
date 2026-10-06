@@ -1,0 +1,7 @@
+[Unit]
+Description=Hermes Shared Browser stack
+Wants=hermes-browser-xvfb.service hermes-browser-chromium.service hermes-browser-vnc.service hermes-browser-novnc.service
+After=hermes-browser-xvfb.service hermes-browser-chromium.service hermes-browser-vnc.service hermes-browser-novnc.service
+
+[Install]
+WantedBy=default.target
