@@ -11,4 +11,6 @@ unit_dir="$(mktemp -d)"
 trap 'rm -rf "$unit_dir"' EXIT
 python3 -B scripts/browser_runtime.py render-units "$unit_dir"
 XDG_RUNTIME_DIR="$unit_dir" systemd-analyze --user verify "$unit_dir"/*.service "$unit_dir"/*.target
-git diff --check
+# Containers may mount a checkout owned by the host user. Trust this path only
+# for this command, without changing the user's global Git configuration.
+git -c safe.directory="$repo_dir" diff --check
